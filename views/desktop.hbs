@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+	<head>
+		<title>留言機器人：{{ title }}</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+        {{> head}}
+        <style type="text/css">
+            h2 {
+                font-size: 16px;
+            }
+            p#mainEvent {
+                font-size: 80px;
+                font-weight: bold;
+                text-align: center;
+                line-height: 80px;
+                margin-top: 10px;
+                margin-bottom: 10px;
+            }
+            header#calArea {
+                display: block;
+                max-height: 300px;
+                min-height: 200px;
+            }
+            p#locationBar {
+                text-align: right;
+                font-size: 18px;
+            }
+            i.place {
+                padding:3px;
+            }
+            footer#commArea {
+                display: flex;
+                justify-content: center;
+                min-height: 50px;
+                flex-direction: column;
+            }
+            footer#commArea > div#buttons {
+                display: flex;
+                justify-content: center;
+                flex-direction: row;
+            }
+            footer#commArea > div#bulletin {
+                display: flex;
+                justify-content: center;
+                flex-direction: column;
+            }
+            footer#commArea > div#loading {
+                display: flex;
+                justify-content: center;
+                flex-direction: row;
+            }
+            footer#commArea > div#loading > i {
+                padding: 2px;
+            }
+            footer#commArea > div#loading > span {
+                font-family: "source-han-sans-traditional";
+                font-weight: normal;
+            }
+            ul.otherList {
+                margin: 3px 0px;
+                font-size: 16px;
+            }
+            ul.otherList > li {
+                display: flex;
+                flex-direction: row;
+                justify-content: space-between;
+                margin: 1px 0px;
+            }
+            ul.otherList > li > span.othername {
+                flex: 1;
+                padding-left:5px;
+            }
+            footer#commArea > ul.otherList > li > span.othertime {
+                color: #FF9;
+                padding-left: 20px;
+            }
+            footer#commArea > ul.otherList > li > span.othertime:before {
+                content: "[";
+            }
+            footer#commArea > ul.otherList > li > span.othertime:after {
+                content: "]";
+            }
+            header#calArea > ul.otherList > li > span.otherics {
+                padding: 2px;
+            }
+            section {
+                display: flex;
+                position: absolute;
+                top: 0px;
+                left: 0px;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.9);
+                justify-content: center;
+                align-items: center;
+                margin: 0px;
+                padding: 0px;
+            }
+            section > div {
+                display: block;
+                background-color: #000;
+                border: 1px solid #FFF;
+                padding: 5px;
+                min-width: 600px;
+                max-width: 650px;
+                min-height: 300px;
+                max-height: 400px;
+                overflow: hidden;
+                position: relative;
+                cursor: default;
+            }
+            section#reportArea > div > p#question {
+                border-bottom: 2px solid #FFF;
+                padding: 3px;
+                font-size: 20px;
+                font-weight: normal;
+                font-family: "source-han-sans-traditional";
+            }
+            section#reportArea > div > p#question > em {
+                color: #FF9;
+                padding: 2px;
+                font-style: normal;
+                transition: all 0.2s;
+                transition-delay: 300ms;
+                cursor: default;
+            }
+            section#reportArea > div > p#question > em:before {
+                content: "["
+            }
+            section#reportArea > div > p#question > em:after {
+                content: "]"
+            }
+            section#reportArea > div > p#question > em:hover {
+                color: #FC3;
+            }
+            section#reportArea > div > p#question > em:active {
+                background-color: #FF9;
+                color: #000;
+                padding: 2px;
+                font-style: normal;
+            }
+            section#reportArea > div > ul#selections > li > em {
+                padding: 2px;
+                font-style: normal;
+            }
+            section#reportArea > div > ul#selections {
+                margin: 3px 0px;
+                font-family: "source-han-sans-traditional";
+                font-weight: normal;
+                font-size: 25px;
+                padding: 0px;
+                overflow-y: scroll;
+                max-height: 190px;
+            }
+            section#reportArea > div > p.buttonArea {
+                border-top: 2px solid #FFF;
+                padding: 1px;
+                margin: 1px;
+                text-align: right;
+            }
+            section#reportArea > div .areaElement {
+                z-index: 3;
+                position: relative;
+            }
+            section#reportArea > div > ul#selections > li {
+                list-style: none;
+                padding: 2px;
+                padding-left: 10px;
+                border: 1px solid #FFF;
+                margin: 3px;
+                transition: all 0.2s;
+                transition-delay: 300ms;
+                opacity: 0.2;
+                cursor: default;
+            }
+            section#reportArea > div > ul#selections > li:hover {
+                opacity: 1;
+            }
+            section#reportArea > div > ul#selections > li:active {
+                background-color: #FFF;
+                color: #000;
+                transition: none;
+            }
+        </style>
+    </head>
+    <body>
+        <header id="calArea">
+            <h1><i class="fa fa-calendar" aria-hidden="true"></i><span id="mainICS">&nbsp;</span></h1>
+            <p id="mainEvent">&nbsp;</p>
+            <p id="locationBar"><i class="fa fa-clock-o place" aria-hidden="true"></i><span id="mainTime">&nbsp;</span><i class="fa fa-map-marker place" aria-hidden="true"></i><span id="mainLocation">&nbsp;</span></p>
+            <h2><i class="fa fa-exclamation-circle" aria-hidden="true"></i><span>其他行程</span></h2>
+            <ul class="otherList"></li>
+            </ul>
+        </header>
+        <footer id="commArea">
+            <div id="bulletin">
+                <h2><i class="fa fa-comments-o" aria-hidden="true"></i><span>最近留言</span></h2>
+                <ul class="otherList"></ul>
+            </div>
+            <div id="buttons">
+                <button id="surveyBtn"><i class="fa fa-user-secret" aria-hidden="true"></i>小老師回報</button>
+                <button id="recordingBtn"><i class="fa fa-microphone" aria-hidden="true"></i>留言給老師</button>
+            </div>
+            <div id="loading">
+                <i class="fa fa-refresh fa-spin fa-fw"></i>
+                <span>下載訊息列表</span>
+            </div>
+        </footer>
+        <section id="reportArea">
+            <div>
+                <p class="tip">請按一下黃底的問題區塊，再選擇你的答案後送出</p>
+                <i class="fa fa-question-circle" aria-hidden="true"></i>
+                <p id="question" class="areaElement"></p>
+                <ul id="selections" class="areaElement"></ul>
+                <p class="buttonArea areaElement">
+                    <button id="sendReport"><i class="fa fa-paper-plane" aria-hidden="true"></i>送出</button>
+                    <button id="closeReport"><i class="fa fa-times-circle" aria-hidden="true"></i>關閉</button>
+                </p>
+            </div>
+        </section>
+        <section id="recordingArea">
+            <div>
+                <i class="fa fa-microphone" aria-hidden="true"></i>
+                <p class="tip">請對準麥克風，按下留言按鈕，開始留言</p>
+                <p class="buttonArea areaElement">
+                    <button id="enableRecording" class="startrecBtn"><i class="fa fa-microphone" aria-hidden="true"></i><span>開始留言</span></button>
+                    <button id="sendRecording"><i class="fa fa-paper-plane" aria-hidden="true"></i>送出</button>
+                    <button id="closeRecording"><i class="fa fa-times-circle" aria-hidden="true"></i>關閉</button>
+                </p>
+                <form></form>
+            </div>
+        </section>
+        <section id="countdownArea">
+            <div>
+                <i class="fa fa-clock-o" aria-hidden="true"></i>
+                <p class="tip">三分鐘沒有動作，將自動回到名牌頁，回到本頁請按倒數計時按鈕</p>
+                <p class="buttonArea areaElement">
+                    <button id="enableRefresh" class="stoprecBtn"><i class="fa fa-stop-circle" aria-hidden="true"></i><span>00:30</span></button>
+                </p>
+            </div>
+        </section>
+        <section id="errorArea">
+            <div>
+                <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+                <p id="errorMsg">&nbsp;</p>
+                <p class="buttonArea areaElement">
+                    <button id="closeError"><i class="fa fa-times-circle" aria-hidden="true"></i>關閉</button>
+                </p>
+            </div>
+        </section>
+        {{> footer}}
+        <script>
+            var calrefreshtime = 60 * 30;
+            var maxrecordtime = 60 * 5;
+            var refreshtimer = 60;
+            var recordtimer = 0;
+            var recording = null;
+            var refresh = null;
+            var recorder = undefined;
+            var recordingfile = null;
+            var recstatus = false;
+            socket = io.connect();
+            fileupload = io.connect("/fileUpload");
+            socket.on("errorMsg", function(data) {
+                if(data.msg == "re-Download") {
+                    socket.emit("getCal");
+                    $("footer#commArea > div#loading > span").text("下載行程列表...");
+                    $("footer#commArea > div#loading").show();
+                    refreshtimer = 180;
+                } else {
+                    $("section#errorArea > div > p#errorMsg").text(data.msg);
+                    $("section#errorArea").show();
+                    refreshtimer = 180;
+                }
+            });
+            socket.on("messageSent", function(data) {
+                refreshtimer = 180;
+                $("section#reportArea").hide();
+                $("section#reportArea > div > p.tip").hide();
+                socket.emit("getmessageService");
+                $("footer#commArea > div#loading > span").text("下載留言列表...");
+                $("footer#commArea > div#loading").show();
+            });
+            socket.on("sendCal", function(data) {
+                if(data.primary != undefined) {
+                    $("header#calArea > p#mainEvent").text(data.primary.summary);
+                    $("header#calArea > h1 > span#mainICS").text(data.primary.calname);
+                    if(data.primary.summary == "休息中") {
+                        $("header#calArea > p#locationBar").hide();
+                    }
+                    $("header#calArea > p#locationBar > span#mainTime").text(moment.unix(data.primary.starttime).format("HH:mm")+"-"+moment.unix(data.primary.endtime).format("HH:mm"));
+                    $("header#calArea > p#locationBar > span#mainLocation").text(data.primary.location);
+                }
+                if(data.secondary.length + data.allDay.length > 0) {
+                    var i = 0;
+                    var colorArr = randomColor({luminosity: 'dark', format: 'rgba', count:13, alpha: 1});
+                    var colorMap = new Object();
+                    $("header#calArea > ul.otherList").empty();
+                    data.secondary.forEach(function(item) {
+                        colorMap[item.calname] = colorArr[i];
+                        insertList(item, colorMap[item.calname], moment.unix(item.starttime).format("HH:mm")+"-"+moment.unix(item.endtime).format("HH:mm"));
+                        i++;
+                    });
+                    data.allDay.forEach(function(item) {
+                        if(!colorMap.hasOwnProperty(item.calname)) {
+                            colorMap[item.calname] = colorArr[i];
+                            i++;
+                        }
+                        insertList(item, colorMap[item.calname], "全天");
+                    });
+                } else {
+                    $("header#calArea > ul.otherList").hide();
+                    $("header#calArea > h2").hide();
+                }
+                $("footer#commArea > div#loading").hide();
+                $("footer#commArea > div#loading > span").text("下載留言列表...");
+                socket.emit("getmessageService");
+            });
+            socket.on("messageList", function(data) {
+                $("footer#commArea > div > ul.otherList").empty();
+                data.forEach(function(item) {
+                    var li = $("<li></li>");
+                    var name = $("<span></span>").addClass("othername").text(item.message);
+                    var timestamp = $("<span></span>").addClass("othertime").text(moment.unix(item.timestamp).format("YYYY/MM/DD HH:mm"));
+                    li.append(name);
+                    li.append(timestamp);
+                    $("footer#commArea > div > ul.otherList").append(li);
+                });
+                $("footer#commArea > div#loading").hide();
+            });
+            ss(fileupload).on("recordingUploaded", function(data) {
+                $("section#recordingArea > div > p.tip").text("留言發送成功！");
+            });
+            socket.on("questionList", function(data) {
+                refreshtimer = 180;
+                $("section#reportArea").show();
+                $("section#reportArea > div > p#question").hide();
+                $("section#reportArea > div > p.buttonArea > button#sendReport").hide();
+                $("section#reportArea > div > p.tip").text("請選擇你要回復的問題");
+                $("section#reportArea > div > ul#selections").empty();
+                data.forEach(function(item) {
+                    var li = $("<li></li>").html(marked.inlineLexer((item.question),[]));
+                    li.data("answers", item.answers);
+                    li.data("question", item.question);
+                    li.data("qid",item.id);
+                    $("section#reportArea > div > ul#selections").append(li);
+                });
+                $("section#reportArea > div > ul#selections > li").off();
+                $("section#reportArea > div > ul#selections > li").on("click", function() {
+                    refreshtimer = 180;
+                    var answers = $(this).data("answers");
+                    var id= $(this).data("qid");
+                    $("section#reportArea > div > p.tip").show();
+                    $("section#reportArea > div > p#question").empty();
+                    $("section#reportArea > div > p#question").data("qid", id);
+                    $("section#reportArea > div > p#question").html(marked.inlineLexer(($(this).data("question")),[]));
+                    $("section#reportArea > div > p#question").show();
+                    $("section#reportArea > div > p.buttonArea > button#sendReport").show();
+                    $("section#reportArea > div > p.tip").text("請按一下黃底的問題區塊，再選擇你的答案後送出");
+                    $("section#reportArea > div > ul#selections").empty();
+                    var i = 0;
+                    answers.forEach(function(item) {
+                        $($("section#reportArea > div > p#question > em")[i]).data("answers", item);
+                        i++;
+                    });
+                    $("section#reportArea > div > p#question > em").on("click", function() {
+                        var oriobj = this;
+                        refreshtimer = 180;
+                        $("section#reportArea > div > ul#selections").empty();
+                        $("section#reportArea > div > p#question > em").data("answers").forEach(function(item) {
+                            var li = $("<li></li>").text(item);
+                            li.data("obj", oriobj);
+                            $("section#reportArea > div > ul#selections").append(li);
+                        });
+                        $("section#reportArea > div > ul#selections > li").on("click", function() {
+                            $($(this).data("obj")).text($(this).text());
+                        });
+                    });
+                    $("section#reportArea > div > p#question > em").first().click();
+                });
+                $("footer#commArea > div#loading").hide();
+            });
+            $().ready(function() {
+                $("section").hide();
+                $("footer#commArea > div#loading").hide();
+                socket.emit("getCal");
+                $("footer#commArea > div#loading > span").text("下載行程列表...");
+                $("footer#commArea > div#loading").show();
+                setInterval(function() {
+                    socket.emit("getCal");
+                    $("footer#commArea > div#loading > span").text("下載行程列表...");
+                    $("footer#commArea > div#loading").show();
+                }, calrefreshtime * 1000);
+                refresh = setInterval(function() {
+                    refreshtimer--;
+                    if(refreshtimer < 30) {
+                        $("section").hide();
+                        $("section#countdownArea").show();
+                        $("button#enableRefresh > span").text(moment.utc(moment.duration(refreshtimer, "seconds").asMilliseconds()).format("mm:ss"));
+                    }
+                    if(refreshtimer == 0) {
+                        location.href = "/";
+                    }
+                }, 1000);
+                $("button#closeError").on("click", function() {
+                    $("section#errorArea").hide();
+                });
+                $("button#enableRefresh").on("click", function() {
+                    refreshtimer = 180;
+                    $("section#countdownArea").hide();
+                });
+                $("button#recordingBtn").on("click", function() {
+                    refreshtimer = 180;
+                    $("section#recordingArea > div > p.tip").text("請對準麥克風，按下留言按鈕，開始留言");
+                    $("button#sendRecording").hide();
+                    $("section#recordingArea").show();
+                });
+                $("button#enableRecording").on("click", function() {
+                    if(recstatus) {
+                        clearInterval(recording);
+                        recordtimer = 0;
+                        recording = null;
+                        recstatus = false;
+                        if(recorder != undefined) { recorder.stop(); }
+                        $("button#sendRecording").show();
+                        $("button#closeRecording").show();
+                        $("button#enableRecording").removeClass("stoprecBtn");
+                        $("button#enableRecording").addClass("startrecBtn");
+                        $("button#enableRecording > i").removeClass("fa-stop-circle");
+                        $("button#enableRecording > i").addClass("fa-microphone");
+                        $("button#enableRecording > span").text("開始留言");
+                        $("section#recordingArea > div > p.tip").text("留言完畢後請按「傳送」送出");
+                    } else {
+                        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                            recstatus = true;
+                            recording = setInterval(function() {
+                                recordtimer++;
+                                refreshtimer = 180;
+                                $("button#enableRecording > span").text(moment.utc(moment.duration(recordtimer, "seconds").asMilliseconds()).format("mm:ss"));
+                                if(recordtimer > 4 * 60) {
+                                    $("section#recordingArea > div > p.tip").text("剩下"+moment.utc(moment.duration(maxrecordtime - recordtimer, "seconds").asMilliseconds()).format("mm:ss")+"之後自動結束錄音");
+                                }
+                                if(recordtimer == maxrecordtime) {
+                                    $("button#enableRecording").click();
+                                }
+                            },1000);
+                            refreshtimer = 180;
+                            $("button#closeRecording").hide();
+                            $("button#enableRecording").removeClass("startrecBtn");
+                            $("button#enableRecording").addClass("stoprecBtn");
+                            $("button#enableRecording > i").removeClass("fa-microphone");
+                            $("button#enableRecording > i").addClass("fa-stop-circle");
+                            $("section#recordingArea > div > p.tip").text("停止錄音，請按一下紅色按鈕");
+                            const chunks = [];
+                            recorder = new MediaRecorder(stream);
+                            recorder.ondataavailable = e => {
+                                chunks.push(e.data);
+                                if (recorder.state == 'inactive') {
+                                    recordingfile = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? new Blob(chunks, { type: 'audio/webm' }) : new Blob(chunks, { type: 'audio/ogg' });
+                                }
+                            };
+                            recorder.start();
+                            setTimeout(() => {
+                                recorder.stop();
+                            }, maxrecordtime*1000);
+                        }).catch(error => {
+                            refreshtimer = 180;
+                            $("section#errorArea > div > p#errorMsg").text("無法啟動音訊設備，請檢查麥克風是否安裝完成，並且授權使用，錯誤："+error);
+                            $("section#errorArea").show();
+                        });
+                    }
+                });
+                $("button#closeRecording").on("click", function() {
+                    if(recstatus) {
+                        $("button#enableRecording").click();
+                    }
+                    $("section#recordingArea").hide();
+                });
+                $("button#sendRecording").on("click", function() {
+                    var stream = ss.createStream();
+                    var blobStream = ss.createBlobReadStream(recordingfile);
+                    var size = 0;
+                    $("section#recordingArea > div > p.tip").text("上傳中...");
+                    var progress = $("<progress></progress>").prop("max", 100);
+                    $("section#recordingArea > div > p.tip").append(progress);
+                    blobStream.on("data", function(chunk) {
+                        size += chunk.length;
+                        progress.prop("value",Math.floor(size / recordingfile.size * 100));
+                        if(size == chunk.length) {
+                            $("section#recordingArea > div > p.tip").text("檔案發送完畢，等待伺服器回應...");
+                        }
+                    });
+                    ss(fileupload).emit("recordingUpload", stream, {filetype: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? "webm" : "ogg"});
+                    blobStream.pipe(stream);
+                });
+                $("button#surveyBtn").on("click", function() {
+                    socket.emit("getquestionService");
+                });
+                $("button#sendReport").on("click", function() {
+                    socket.emit("sendmsgService", {
+                        message: $("p#question").text(),
+                        qid: $("p#question").data("qid")
+                    });
+                    $("footer#commArea > div#loading > span").text("送出留言...");
+                    $("footer#commArea > div#loading").show();
+                    refreshtimer = 180;
+                });
+                $("button#closeReport").on("click", function() {
+                    $("section#reportArea").hide();
+                });
+            });
+            function insertList(item, color, time) {
+                var li = $("<li></li>");
+                var ics = $("<span></span>").addClass("otherics").text(item.calname);
+                ics.css("backgroundColor", color);
+                var name = $("<span></span>").addClass("othername").text(item.summary);
+                var clockicon = $("<i></i>").addClass("fa fa-clock-o place");
+                var clock = $("<span></span>").addClass("othertime").text(time);
+                var locationicon = $("<i></i>").addClass("fa fa-map-marker place");
+                var location = $("<span></span>").addClass("otherlocation").text(item.location);
+                li.append(ics);
+                li.append(name);
+                li.append(clockicon);
+                li.append(clock);
+                li.append(locationicon);
+                li.append(location);
+                $("header#calArea > ul.otherList").append(li);
+            }
+        </script>
+    </body>
+</html>

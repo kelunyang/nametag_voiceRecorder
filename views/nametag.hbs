@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+	<head>
+		<title>留言機器人：{{ title }}</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+        {{> head}}
+        <style type="text/css">
+            p#nameArea {
+                font-size: 80px;
+                font-weight: bold;
+                text-align: center;
+                line-height: 80px;
+                margin-top: 10px;
+                margin-bottom: 10px;
+            }
+            header#nameArea {
+                display: block;
+                max-height: 200px;
+                min-height: 150px;
+            }
+            footer#commArea {
+                display: flex;
+                justify-content: center;
+                min-height: 50px;
+            }
+        </style>
+    </head>
+    <body>
+        <header id="nameArea">
+            <h1><i class="fa fa-address-card" aria-hidden="true"></i><span id="title">{{ jobtitle }}</span></h1>
+            <p id="nameArea">{{ name }}</p>
+        </header>
+        <footer id="commArea">
+            <a class="button" href="/desktop" target="_top"><i class="fa fa-commenting" aria-hidden="true"></i>有事請按此</a>
+        </footer>
+        {{> footer}}
+        <script>
+            socket = io.connect();
+        </script>
+    </body>
+</html>
