@@ -75,7 +75,7 @@ chatbot.startPolling();
 
 app.get("/", (req,res) => {
 	var ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-	console.log("Client Connected:"+ip);
+	console.log("Client Connected:"+ip+"("+moment().format("YYYY/MM/DD HH:mm:ss")+")");
 	if(!req.session.hasOwnProperty("initalSession")) {
 		req.session.userID = req.query.hasOwnProperty("userID") ? req.query.userID : "A126408543";
 		req.session.save();
@@ -197,15 +197,23 @@ serv_io.sockets.on('connection', async (socket) => {
 					var output = {
 						allDay: new Array(),
 						primary: undefined,
+						upcomming: undefined,
+						secondary: new Array()
+					}
+					var calname = {
+						primary: undefined,
 						secondary: new Array()
 					}
 					data.forEach(function(item) {
 						if(item != undefined) {
 							if(item.type == 0) {
 								output.primary = item.selectedEvent;
+								output.upcomming = item.upcommingEvent;
+								calname.primary = item.calName;
 							} else {
 								if(item.selectedEvent != undefined) {
 									output.secondary.push(item.selectedEvent);
+									calname.secondary.push(item.calName);
 								}
 							}
 							if(item.allDay != undefined) {
@@ -213,14 +221,33 @@ serv_io.sockets.on('connection', async (socket) => {
 							}
 						}
 					});
+					output.secondary.sort(function(a,b) {
+						return b.dist - a.dist;
+					});
+					if(output.primary == undefined) {
+						if(output.secondary.length > 0) {
+							output.primary = output.secondary.splice(0,1);
+						} else {
+							output.primary = {
+								location: "休息中",
+								summary: "休息中",
+								calname: calname.primary,
+								endtime: 0,
+								starttime: 0,
+								dist: 60 * 60 * 24
+							};
+						}
+					}
 					socket.emit("sendCal", output);	
 				})
 				.catch(error => {
 					console.log(error);
-					if(error.response.status == 503) {
-						socket.emit("errorMsg", {
-							msg: "re-Download"
-						});
+					if(error.hasOwnProperty("response")) {
+						if(error.response.status == 503) {
+							socket.emit("errorMsg", {
+								msg: "re-Download"
+							});
+						}
 					} else {
 						socket.emit("errorMsg", {
 							msg: error
@@ -318,6 +345,7 @@ serv_io.sockets.on('connection', async (socket) => {
 function calGetter(response, type) {
 	var events = new Array();
 	var filteredEvent = new Array();
+	var filteredUpcommings = new Array();
 	var str = response.data;
 	var data = ical.parse(str);
 	var comp = new ical.Component(data);
@@ -328,25 +356,33 @@ function calGetter(response, type) {
 		events.push(new ical.Event(item)); 
 	});
 	events.forEach(function(item) {
+		item.dist = moment().unix() - moment(item.startDate.toJSDate()).unix();
 		if(moment(item.startDate.toJSDate()).unix() <= moment().unix()) {
 			if(moment(item.endDate.toJSDate()).unix() >= moment().unix()) {
-				item.dist = moment().unix() - moment(item.startDate.toJSDate()).unix();
 				if(item.duration.toSeconds() >= 60 * 60 * 24) {
 					allday.push({
 						location: item.location,
 						summary: item.summary,
 						calname: name,
 						endtime: 0,
-						starttime: 0
+						starttime: 0,
+						dist: item.dist
 					});
 				} else {
 					filteredEvent.push(item);
 				}
 			}
 		}
+		if(moment(item.startDate.toJSDate()).unix() > moment().unix()) {
+			if(moment(item.endDate.toJSDate()).unix() > moment().unix()) {
+				if(item.duration.toSeconds() < 60 * 60 * 24) {
+					filteredUpcommings.push(item);
+				}
+			}
+		}
 	});
 	var sortedEvent = filteredEvent.sort(function(a,b) {
-		return a.dist - b.dist;
+		return b.dist - a.dist;
 	});
 	var selectedEvent = sortedEvent.length > 0 ? 
 	{
@@ -355,23 +391,28 @@ function calGetter(response, type) {
 		calname: name,
 		endtime: moment(sortedEvent[0].endDate.toJSDate()).unix(),
 		starttime: moment(sortedEvent[0].startDate.toJSDate()).unix(),
+		dist: sortedEvent[0].item
 	} : undefined;
+	var upcommingEvent = undefined;
 	if(type == 0) {
-		if(selectedEvent == undefined) {
-			selectedEvent = {
-				location: "休息中",
-				summary: "休息中",
-				calname: name,
-				endtime: 0,
-				starttime: 0
-			};
-		}
+		filteredUpcommings.sort(function(a,b) {
+			return b.dist - a.dist;
+		});
+		upcommingEvent = filteredUpcommings.length > 0 ? {
+			location: filteredUpcommings[0].location,
+			summary: filteredUpcommings[0].summary,
+			calname: name,
+			endtime: moment(filteredUpcommings[0].endDate.toJSDate()).unix(),
+			starttime: moment(filteredUpcommings[0].startDate.toJSDate()).unix(),
+		} : undefined;
 	}
 	/*var secondarycal = new icalexpander({ str, maxIterations: 100 });
 	var events = icalexpander.between(moment().startOf("day").toDate(), moment().endOf("day").toDate());*/
 	return {
+		calName: name,
 		type: type,
 		selectedEvent: selectedEvent,
-		allDay: allday
+		allDay: allday,
+		upcommingEvent: upcommingEvent
 	}
 }
