@@ -8,6 +8,37 @@
         font-size: 14px;
         cursor: default;
     }
+    aside {
+        font-family: Verdana, Geneva, Tahoma, sans-serif;
+        top: 20px;
+        padding: 2px;
+        position: fixed;
+        right: 10px;
+        color: #222;
+        writing-mode: vertical-rl;
+        text-orientation: sideways;
+    }
+    aside > a > i {
+        margin-left: 3px;
+        margin-right: 3px;
+    }
+    aside > a {
+        text-indent:  5px;
+        color: #222;
+        text-decoration: none;
+        transition: all 0.2s;
+        transition-delay: 300ms;
+    }
+    aside > a:hover {
+        color: #FF9;
+        text-decoration: underline;
+    }
+    aside > a:active {
+        color: #000;
+        background: #FF9;
+        text-decoration: none;
+        transition: none;
+    }
     footer,header {
         margin: 0 auto;
         width: 500px;
@@ -28,6 +59,8 @@
         margin-bottom: 3px;
     }
     p {
+        font-family: "source-han-sans-traditional";
+        font-weight: normal;
         color: #FFF;
         font-size: 14px;
         line-height: 20px;

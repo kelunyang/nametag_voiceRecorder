@@ -5,7 +5,7 @@
         <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
         {{> head}}
         <style type="text/css">
-            p#nameArea {
+            p#name {
                 font-size: 80px;
                 font-weight: bold;
                 text-align: center;
@@ -22,20 +22,264 @@
                 display: flex;
                 justify-content: center;
                 min-height: 50px;
+                flex-direction: column;
+                text-align: center;
+            }
+            p#infoBar > span#weather > span#temp:after {
+                content: "°C";
+            }
+            p#infoBar > span > i {
+                padding: 0px 3px;
+            }
+            p#infoBar > span#weather > span#aqicolor {
+                padding: 0px 3px;
+                text-indent: 5px;
+            }
+            p#infoBar {
+                font-size: 20px;
+                text-align: right;
+                display: flex;
+                justify-content: space-between;
+            }
+            button.emButton {
+                font-size: 15px;
+                background-color: #600;
             }
         </style>
     </head>
     <body>
         <header id="nameArea">
             <h1><i class="fa fa-address-card" aria-hidden="true"></i><span id="title">{{ jobtitle }}</span></h1>
-            <p id="nameArea">{{ name }}</p>
+            <p id="name">{{ name }}</p>
+            <p id="infoBar">
+                <span id="event">
+                    <i class="fa fa-calendar-o" aria-hidden="true"></i>
+                    <span id="eventvalue"></span>
+                    <i class="fa fa-map-marker" aria-hidden="true"></i>
+                    <span id="eventplace"></span>
+                </span>
+                <span id="weather">
+                    <i id="weathercondition" class="fa fa-" aria-hidden="true"></i>
+                    <span id="temp"></span>
+                    <span id="aqicolor">AQI</span>
+                    <span id="aqivalue"></span>
+                </span>
+            </p>
         </header>
         <footer id="commArea">
-            <a class="button" href="/desktop" target="_top"><i class="fa fa-commenting" aria-hidden="true"></i>有事請按此</a>
+            <div>
+                <a class="button" href="/desktop" target="_top"><i class="fa fa-commenting" aria-hidden="true"></i>有事請按此</a>
+            </div>
+            <div id="loading">
+                <i class="fa fa-refresh fa-spin fa-fw" id="loadingicon"></i>
+                <i class="fa fa-info-circle" aria-hidden="true" id="infoicon"></i>
+                <span>更新資訊...</span>
+            </div>
         </footer>
+
         {{> footer}}
+
         <script>
+            var refreshArray = new Array();
+            reconnectClock = new timer(5*60,"重新連線倒數計時");
+            reconnectTimer = new timer(1,"重新連線計時器");
             socket = io.connect();
+            pendingCommand = null;
+            socket.on("userChecked", function(data) {
+                if(data) {
+                    pendingCommand();
+                } else {
+                    location.reload();
+                }
+            });
+            socket.on('connect', function () {
+                reconnectTimer.clearInterval();
+                alert.hide();
+            });
+            socket.on("disconnect", (data) => {
+                alert.setMsg("",2);
+                alert.show();
+                $("footer#commArea > div#loading > span").empty();
+                $("footer#commArea > div#loading > span").append("<button class='emButton' id='connectSocket'>網路連線中斷<span id='reconnectTimer'></span>後重新連線，立刻連線請按此</button>");
+                reconnectTimer.startInterval(function() {
+                    reconnectClock.clock--;
+                    $("span#reconnectTimer").text(moment.utc(moment.duration(reconnectClock.clock, "seconds").asMilliseconds()).format("mm:ss"));
+                    if(reconnectClock.clock == 0) {
+                        socket = io.connect();
+                        reconnectClock.reset();
+                    }
+                });
+                $("button#connectSocket").on("click", function() {
+                    reconnectClock.clock = 1;
+                });
+            });
+            socket.on("sendCal", (data) => {
+                if(data.primary != undefined) {
+                    if(data.primary.summary == "休息中") {
+                        $("p#infoBar > span#event > span").hide();
+                        $("p#infoBar > span#event > i").hide();
+                    } else {
+                        $("p#infoBar > span#event > span").show();
+                        $("p#infoBar > span#event > i").show();
+                        $("p#infoBar > span#event > span#eventvalue").text(data.primary.summary);
+                        $("p#infoBar > span#event > span#eventplace").text(data.primary.location);
+                        if(refreshArray.filter(function(item) {
+                            return item.name == "主行事曆事件："+data.primary.summary + data.primary.endtime;
+                        }).length == 0) {
+                            refreshArray.push(new timer(data.primary.endtime - moment().unix(),"主行事曆事件："+data.primary.summary + data.primary.endtime));
+                            refreshArray[refreshArray.length - 1].startTimer(function() {
+                                pendingCommand = function() {
+                                    socket.emit("getCal", {
+                                        parameter: 1
+                                    });
+                                }
+                                socket.emit("userCheck");
+                            });
+                        }
+                    }
+                } else {
+                    $("p#infoBar > span#event > span").hide();
+                    $("p#infoBar > span#event > i").hide();
+                }
+                if(data.upcomming != undefined) {
+                    if(refreshArray.filter(function(item) {
+                        return item.name == "主行事曆事件："+data.upcomming.summary + data.upcomming.starttime;
+                    }).length == 0) {
+                        refreshArray.forEach(function(item) {
+                            if(item.name == "行事曆定時排程") {
+                                item.clearInterval();
+                            }
+                        });
+                        refreshArray.push(new timer(data.upcomming.starttime - moment().unix(),"主行事曆事件："+data.upcomming.summary + data.upcomming.starttime));
+                        refreshArray[refreshArray.length - 1].startTimer(function() {
+                            pendingCommand = function() {
+                                socket.emit("getCal", {
+                                    parameter: 1
+                                });
+                            }
+                            socket.emit("userCheck");
+                        });
+                    }
+                    if(refreshArray.filter(function(item) {
+                        return item.name == "主行事曆事件："+data.upcomming.summary + data.upcomming.endtime;
+                    }).length == 0) {
+                        refreshArray.forEach(function(item) {
+                            if(item.name == "行事曆定時排程") {
+                                item.clearInterval();
+                            }
+                        });
+                        refreshArray.push(new timer(data.upcomming.endtime - moment().unix(),"主行事曆事件："+data.upcomming.summary + data.upcomming.endtime));
+                        refreshArray[refreshArray.length - 1].startTimer(function() {
+                            pendingCommand = function() {
+                                socket.emit("getCal", {
+                                    parameter: 1
+                                });
+                            }
+                            socket.emit("userCheck");
+                        });
+                    }
+                }
+                var intervalCheck = false;
+                var nexttime = refreshArray.filter(function(item) {
+                    return item.name.indexOf("主行事曆事件") > -1;
+                })
+                nexttime.sort(function(a,b) {
+                    return b.original - a.original;
+                });
+                if(nexttime.length > 0) {
+                    intervalCheck = nexttime[0].original > 3 * 60 * 60 ? true : false;
+                }
+                if(intervalCheck) {
+                    if(refreshArray.filter(function(item) {
+                        return item.name == "行事曆定時排程";
+                    }).length == 0) {
+                        refreshArray.forEach(function(item) {
+                            if(item.name == "行事曆定時排程") {
+                                item.clearInterval();
+                            }
+                        });
+                        refreshArray.push(new timer(30*60, "行事曆定時排程"));
+                        refreshArray[refreshArray.length - 1].startInterval(function() {
+                            pendingCommand = function() {
+                                socket.emit("getCal", {
+                                    parameter: 1
+                                });
+                            }
+                            socket.emit("userCheck");
+                        });
+                    }
+                }
+                alert.hide();
+                if(refreshArray.filter(function(item) {
+                    return item.name == "天氣定時排程";
+                }).length == 0) {
+                    refreshArray.push(new timer(60*60, "天氣定時排程"));
+                    refreshArray[refreshArray.length - 1].startInterval(function() {
+                        update();
+                    });
+                }
+            });
+            $().ready(() => {
+                alert.hide();
+                refreshArray.push(new timer(1, "行事曆啟動排程"));
+                refreshArray[refreshArray.length - 1].startTimer(async () => {
+                    Promise.resolve(update()).finally(function() {
+                        alert.setMsg("更新行事曆...", 0);
+                        alert.show();
+                        pendingCommand = function() {
+                            socket.emit("getCal", {
+                                parameter: 1
+                            });
+                        }
+                        socket.emit("userCheck");
+                    });
+                });
+            });
+            function update() {
+                alert.setMsg("更新天氣資訊...", 0);
+                alert.show();
+                return $.ajax({ /* 此處的return可以把jquery轉換為promise  */
+                    url: "https://api.airvisual.com/v2/nearest_city?key={{api}}",
+                    cache: false
+                }).done(function(data) {
+                    $("p#infoBar > span#weather").show();
+                    $("p#infoBar > span#weather > span#temp").text(data.data.current.weather.tp);
+                    $("p#infoBar > span#weather > span#aqivalue").text(data.data.current.pollution.aqius);
+                    var aqicolor = "060";
+                    if(data.data.current.pollution.aqius > 300) {
+                        aqicolor = "630";
+                    } else if(data.data.current.pollution.aqius > 200) {
+                        aqicolor = "639";
+                    } else if(data.data.current.pollution.aqius > 150) {
+                        aqicolor = "900";
+                    } else if(data.data.current.pollution.aqius > 100) {
+                        aqicolor = "C60";
+                    } else if(data.data.current.pollution.aqius > 50) {
+                        aqicolor = "CC0";
+                    }
+                    $("p#infoBar > span#weather > span#aqicolor").css("backgroundColor", "#"+aqicolor);
+                    var weathercondition = "sun-o";
+                    if(data.data.current.weather.ic.indexOf("03") > -1 || data.data.current.weather.ic.indexOf("04") > -1) {
+                        weathercondition = "cloud";
+                    } else if(data.data.current.weather.ic.indexOf("09") > -1 || data.data.current.weather.ic.indexOf("10") > -1) {
+                        weathercondition = "tint";
+                    } else if(data.data.current.weather.ic.indexOf("11") > -1) {
+                        weathercondition = "bolt";
+                    } else if(data.data.current.weather.ic.indexOf("01") > -1 || data.data.current.weather.ic.indexOf("02") > -1) {
+                        weathercondition = "sun-o";
+                    } else {
+                        $("p#infoBar > span#weather > i#weathercondition").text(data.data.current.weather.ic);
+                    }
+                    $("p#infoBar > span#weather > i#weathercondition").removeClass();
+                    $("p#infoBar > span#weather > i#weathercondition").addClass("fa");
+                    $("p#infoBar > span#weather > i#weathercondition").addClass("fa-"+weathercondition);
+                    alert.hide();
+                }).fail(function(data) {
+                    $("p#infoBar > span#weather").hide();
+                    alert.setMsg("天氣載入錯誤："+data.toString(), 1);
+                    alert.show();
+                });
+            }
         </script>
     </body>
 </html>

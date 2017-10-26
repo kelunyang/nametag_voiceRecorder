@@ -1,3 +1,6 @@
+<aside>
+    <a href="mailto:kelunyang@outlook.com">Kelunyang </a> @ 2017 CC-BY <a target="_top" href="https://github.com/kelunyang/nametag_voiceRecorder"><i class="fa fa-github" aria-hidden="true"></i> GitHub</a>
+</aside>
 <script src="https://use.typekit.net/bvy7rqe.js"></script>
 <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/marked/0.3.6/marked.js"></script>
@@ -10,4 +13,77 @@
 <script src="/socket.io-stream.js"></script>
 <script>
     try{Typekit.load({ async: true });}catch(e){}
+    class alertClass {
+        constructor() {
+        }
+        setMsg(msg, type) {
+            this.msg = msg;
+            this.type = type;
+        }
+        show() {
+            $("footer#commArea > div#loading").show();
+            $("footer#commArea > div#loading > i#loadingicon").hide();
+            $("footer#commArea > div#loading > i#infoicon").hide();
+            switch(this.type) {
+                case 0:
+                    $("footer#commArea > div#loading > i#loadingicon").show();
+                    $("footer#commArea > div#loading > i#infoicon").hide();
+                break;
+                case 1:
+                    $("footer#commArea > div#loading > i#infoicon").show();
+                    $("footer#commArea > div#loading > i#loadingicon").hide();
+                break;
+                case 2:
+                    $("footer#commArea > div#loading > i#infoicon").hide();
+                    $("footer#commArea > div#loading > i#loadingicon").hide();
+                break;
+            }
+            $("footer#commArea > div#loading > span").text(this.msg);
+        }
+        hide() {
+            $("footer#commArea > div#loading").hide();
+        }
+    }
+    var alert = new alertClass();
+    class timer {
+        constructor(time, name) {
+            this.original = time;
+            this.clock = time;
+            this.timerObj = null;
+            this.name = name;
+            this.start = false;
+        }
+        reset() {
+            this.clock = this.original;
+        }
+        startInterval(fn) {
+            console.log(this.name+" Interval timer setted in every "+ moment.utc(moment.duration(this.original, "seconds").asMilliseconds()).format("DD days, hh:mm:ss"));
+            var oriobj = this;
+            this.start = true;
+            this.timerObj = setInterval(function() {
+                console.log(oriobj.name+" interval timer executed in "+moment().format("YYYY/MM/DD HH:mm:ss"));
+                fn();
+            }, this.original * 1000);
+        }
+        startTimer(fn) {
+            console.log(this.name+" timeout timer will fire in "+ moment.unix(moment().unix()+this.original).format("DD hh:mm:ss"));
+            console.log("current time: "+ moment().format("YYYY/MM/DD HH:mm:ss"));
+            var oriobj = this;
+            this.start = true;
+            this.timerObj = setTimeout(function() {
+                console.log(oriobj.name+" timeout timer executed in "+moment().format("YYYY/MM/DD HH:mm:ss"));
+                fn();
+            }, this.original * 1000 + 2000);
+        }
+        clearTimer() {
+            this.start = false;
+            clearTimeout(this.timerObj);
+            this.timerObj = null;
+        }
+        clearInterval() {
+            this.start = false;
+            clearInterval(this.timerObj);
+            this.timerObj = null;
+        }
+    }
 </script>

@@ -172,6 +172,32 @@
                 color: #000;
                 transition: none;
             }
+            section#recordingArea > div > p.supportMsg {
+                text-align: center;
+                font-family: "source-han-sans-traditional";
+                font-weight: normal;
+            }
+            section#recordingArea > div > p.supportMsg > i {
+                padding: 0px 3px;
+            }
+            section#recordingArea > div > p.supportMsg > textarea#textMessage {
+                width: 60%;
+                height: 60px;
+                font-size: 14px;
+            }
+            section#recordingArea > div > p.supportMsg > a {
+                color: #FFF;
+                transition: all 0.2s;
+                transition-delay: 300ms;
+            }
+            section#recordingArea > div > p.supportMsg > a:hover {
+                color: #FFF;
+                text-decoration: none;
+            }
+            section#recordingArea > div > p.supportMsg > a:active {
+                color: #000;
+                background-color: #FFF;
+            }
         </style>
     </head>
     <body>
@@ -221,13 +247,19 @@
         <section id="recordingArea">
             <div>
                 <i class="fa fa-microphone" aria-hidden="true"></i>
-                <p class="tip">請對準麥克風，按下留言按鈕，開始留言</p>
+                <p class="tip">&nbsp;</p>
                 <p class="buttonArea areaElement">
-                    <button id="enableRecording" class="startrecBtn"><i class="fa fa-microphone" aria-hidden="true"></i><span>開始留言</span></button>
+                    <button id="enableRecording" class="startrecBtn"><i class="fa fa-microphone" aria-hidden="true"></i><span>錄製留言</span></button>
                     <!-- <button id="playRecording"><i class="fa fa-play" aria-hidden="true"></i><span>播放留言</span></button> -->
+                    <button id="sendText"><i class="fa fa-commenting-o" aria-hidden="true"></i>文字留言</button>
                     <button id="sendRecording"><i class="fa fa-paper-plane" aria-hidden="true"></i>送出</button>
                     <button id="closeRecording"><i class="fa fa-times-circle" aria-hidden="true"></i>關閉</button>
                 </p>
+                <p id="textMsgArea" class="supportMsg">
+                    <textarea id="textMessage" placeholder="請輸入文字訊息"></textarea><br/>
+                    <i class="fa fa-envelope" aria-hidden="true"></i>也可以Email至：<a href="mailto:kelunyang@outlook.com">kelunyang@outlook.com</a>
+                </p>
+                <p class="supportMsg"><i class="fa fa-firefox" aria-hidden="true"></i><i class="fa fa-chrome" aria-hidden="true"></i>請使用最新版的Firefox或Chrome瀏覽器，否則可能無法錄音</p>
                 <div id="waveform"></div>
             </div>
         </section>
@@ -249,7 +281,9 @@
                 </p>
             </div>
         </section>
+
         {{> footer}}
+
         <script>
             function insertList(item, color, time) {
                 var li = $("<li></li>");
@@ -276,10 +310,9 @@
                     $("header#calArea > div#mainEvent > div#currentEvent").animate({
                         left: $("header#calArea > div#mainEvent").outerWidth(true) * -1
                     }, function() {
-                        $("footer#commArea > div#loading").show();
-                        $("footer#commArea > div#loading > i#loadingicon").hide();
-                        $("footer#commArea > div#loading > i#infoicon").show();
-                        $("footer#commArea > div#loading > span").text("向右滑動回復目前的事件");
+                        alert.setMsg("向右滑動回復目前的事件", 1);
+                        alert.show();
+                        $("header#calArea > h1 > span#mainICS").text($("header#calArea > div#mainEvent > div#upcommingEvent").data("calname"));
                     });
                 } else {
                     $("header#calArea > div#mainEvent > div#upcommingEvent").animate({
@@ -288,21 +321,16 @@
                     $("header#calArea > div#mainEvent > div#currentEvent").animate({
                         left: 0
                     }, function() {
-                        $("footer#commArea > div#loading").show();
-                        $("footer#commArea > div#loading > i#loadingicon").hide();
-                        $("footer#commArea > div#loading > i#infoicon").show();
-                        $("footer#commArea > div#loading > span").text("向左滑動檢視下一個事件");
+                        alert.setMsg("向左滑動檢視下一個事件", 1);
+                        alert.show();
+                        $("header#calArea > h1 > span#mainICS").text($("header#calArea > div#mainEvent > div#currentEvent").data("calname"));
                     });
                 }
             }
-            class timer {
-                constructor(time) {
-                    this.original = time;
-                    this.clock = time;
-                }
-                reset() {
-                    this.clock = this.original;
-                }
+            function update() {
+                socket.emit("getCal");
+                alert.setMsg("下載行程列表...", 0);
+                alert.show();
             }
             class point {
                 constructor() {
@@ -314,13 +342,15 @@
                     this.y = undefined;
                 }
             }
+            var pendingCommand = null;
             var recordingready = false;
             var calrefreshtime = 60 * 30;
             var maxrecordtime = 60 * 5;
-            var refreshtimer = new timer(240);
-            var recordtimer = new timer(0);
+            var refreshtimer = new timer(240, "頁面倒數計時");
+            var recordtimer = new timer(0, "錄音計時器");
+            var refreshArray = new Array();
             var recording = null;
-            var refresh = null;
+            var refreshback = new timer(1, "頁面重整");
             var recorder = undefined;
             /*var wavesurfer = WaveSurfer.create({
                 container: '#waveform',
@@ -354,9 +384,11 @@
             fileupload = io.connect("/fileUpload");
             socket.on("errorMsg", function(data) {
                 if(data.msg == "re-Download") {
-                    socket.emit("getCal");
-                    $("footer#commArea > div#loading > span").text("下載行程列表...");
-                    $("footer#commArea > div#loading").show();
+                    socket.emit("getCal", {
+                        parameter: 0
+                    });
+                    alert.setMsg("下載行程列表...", 0);
+                    alert.show();
                     refreshtimer.reset();
                 } else {
                     $("section#errorArea > div > p#errorMsg").text(JSON.parse(data.msg));
@@ -366,24 +398,51 @@
             });
             socket.on("messageSent", function(data) {
                 refreshtimer.reset();
+                $("section#recordingArea").hide();
                 $("section#reportArea").hide();
                 $("section#reportArea > div > p.tip").hide();
-                socket.emit("getmessageService");
-                $("footer#commArea > div#loading > span").text("下載留言列表...");
-                $("footer#commArea > div#loading").show();
+                pendingCommand = function() {
+                    socket.emit("getmessageService");
+                    alert.setMsg("下載留言列表...", 0);
+                    alert.show();
+                }
+                socket.emit("userCheck");
+            });
+            socket.on("disconnect", (data) => {
+                alert.setMsg("網路連線中斷，重新連線中...", 1);
+                alert.show();
+                socket = io.connect();
+            });
+            socket.on('connect', function () {
+                alert.hide();
             });
             socket.on("sendCal", async (data) => {
                 if(data.primary != undefined) {
                     $("header#calArea > h1 > span#mainICS").text(data.primary.calname);
+                    $("header#calArea > div#mainEvent > div#currentEvent").data("calname", data.primary.calname);
                     $("header#calArea > div#mainEvent > div#currentEvent > p.eventName").text(data.primary.summary);
                     if(data.primary.summary == "休息中") {
                         $("header#calArea > div#mainEvent > div#currentEvent > p.locationBar").hide();
+                    } else {
+                        if(refreshArray.filter(function(item) {
+                            return item.name == data.primary.summary + data.primary.endtime;
+                        }).length == 0) {
+                            refreshArray.forEach(function(item) {
+                                if(item.name == "行事曆定時排程") {
+                                    item.clearInterval();
+                                }
+                            });
+                            refreshArray.push(new timer(data.primary.endtime - moment().unix(),"主行事曆事件："+data.primary.summary+data.primary.endtime));
+                            refreshArray[refreshArray.length - 1].startTimer(function() {
+                                update();
+                            });
+                        }
                     }
                     $("header#calArea > div#mainEvent > div#currentEvent > p.locationBar > span.eventTime").text(moment.unix(data.primary.starttime).format("HH:mm")+"-"+moment.unix(data.primary.endtime).format("HH:mm"));
                     $("header#calArea > div#mainEvent > div#currentEvent > p.locationBar > span.eventLocation").text(data.primary.location);
                 }
                 if(data.upcomming != undefined) {
-                    $("header#calArea > h1 > span#mainICS").text(data.upcomming.calname);
+                    $("header#calArea > div#mainEvent > div#upcommingEvent").data("calname", data.upcomming.calname);
                     $("header#calArea > div#mainEvent > div#upcommingEvent > p.eventName").text(data.upcomming.summary);
                     if(data.upcomming.summary == "休息中") {
                         $("header#calArea > div#mainEvent > div#upcommingEvent > p.locationBar").hide();
@@ -391,8 +450,49 @@
                     $("header#calArea > div#mainEvent > div#upcommingEvent > p.locationBar > span.eventTime").text(moment.unix(data.upcomming.starttime).format("HH:mm")+"-"+moment.unix(data.upcomming.endtime).format("HH:mm"));
                     $("header#calArea > div#mainEvent > div#upcommingEvent > p.locationBar > span.eventLocation").text(data.upcomming.location);
                     $("header#calArea > div#mainEvent > div#upcommingEvent").data("disable", false);
-                } else {
+                    if(refreshArray.filter(function(item) {
+                        return item.name == data.upcomming.summary + data.upcomming.starttime;
+                    }).length == 0) {
+                        refreshArray.forEach(function(item) {
+                            if(item.name == "行事曆定時排程") {
+                                item.clearInterval();
+                            }
+                        });
+                        refreshArray.push(new timer(data.upcomming.starttime - moment().unix(), "主行事曆事件："+data.upcomming.summary + data.upcomming.starttime));
+                        refreshArray[refreshArray.length - 1].startTimer(function() {
+                            update();
+                        });
+                    }
+                    if(refreshArray.filter(function(item) {
+                        return item.name == data.upcomming.summary + data.upcomming.endtime;
+                    }).length == 0) {
+                        refreshArray.forEach(function(item) {
+                            if(item.name == "行事曆定時排程") {
+                                item.clearInterval();
+                            }
+                        });
+                        refreshArray.push(new timer(data.upcomming.endtime - moment().unix(),"主行事曆事件："+data.upcomming.summary + data.upcomming.endtime));
+                        refreshArray[refreshArray.length - 1].startTimer(function() {
+                            update();
+                        });
+                    }
+                }
+                var intervalCheck = false;
+                var nexttime = refreshArray.filter(function(item) {
+                    return item.name.indexOf("主行事曆事件") > -1;
+                })
+                nexttime.sort(function(a,b) {
+                    return b.original - a.original;
+                });
+                if(nexttime.length > 0) {
+                    intervalCheck = nexttime[0].original > 3 * 60 * 60 ? true : false;
+                }
+                if(intervalCheck) {
                     $("header#calArea > div#mainEvent > div#upcommingEvent").data("disable", true);
+                    refreshArray.push(new timer(30*60 ,"行事曆定時排程"));
+                    refreshArray[refreshArray.length - 1].startInterval(function() {
+                        update();
+                    });
                 }
                 if($("header#calArea > div#mainEvent > div#upcommingEvent").innerHeight() > $("header#calArea > div#mainEvent > div#currentEvent").innerHeight()) {
                     $("header#calArea > div#mainEvent > div#currentEvent").css("height", $("header#calArea > div#mainEvent > div#upcommingEvent").innerHeight() + "px");
@@ -422,8 +522,7 @@
                     $("header#calArea > ul.otherList").hide();
                     $("header#calArea > h2").hide();
                 }
-                $("footer#commArea > div#loading").hide();
-                $("footer#commArea > div#loading > span").text("下載留言列表...");
+                alert.hide();
                 if(data.upcomming != undefined) {
                     await Promise.delay(1000).then(function() {
                         Promise.resolve(mainSwipe(true));
@@ -431,11 +530,16 @@
                         Promise.resolve(mainSwipe(false));
                     });
                 }
-                socket.emit("getmessageService");
+                pendingCommand = function() {
+                    socket.emit("getmessageService");
+                }
+                socket.emit("userCheck");
             });
             socket.on("messageList", function(data) {
                 $("footer#commArea > div#bulletin > ul.otherList").empty();
                 if(data.length > 0) {
+                    $("footer#commArea > div#bulletin > ul.otherList").show();
+                    $("footer#commArea > div#bulletin > h2").show();
                     data.forEach(function(item) {
                         var li = $("<li></li>");
                         var name = $("<span></span>").addClass("othername").text(item.message);
@@ -448,10 +552,30 @@
                     $("footer#commArea > div#bulletin > ul.otherList").hide();
                     $("footer#commArea > div#bulletin > h2").empty();
                 }
-                $("footer#commArea > div#loading").hide();
+                alert.hide();
+                if(!refreshback.start) {
+                    refreshback.startInterval(function() {
+                        refreshtimer.clock--;
+                        if(refreshtimer.clock < 30) {
+                            $("section").hide();
+                            $("section#countdownArea").show();
+                            $("button#enableRefresh > span").text(moment.utc(moment.duration(refreshtimer.clock, "seconds").asMilliseconds()).format("mm:ss"));
+                        }
+                        if(refreshtimer.clock == 0) {
+                            location.href = "/";
+                        }
+                    });
+                }
             });
             ss(fileupload).on("recordingUploaded", function(data) {
                 $("section#recordingArea > div > p.tip").text("留言發送成功！");
+            });
+            socket.on("userChecked", function(data) {
+                if(data) {
+                    pendingCommand();
+                } else {
+                    location.reload();
+                }
             });
             socket.on("questionList", function(data) {
                 refreshtimer.reset();
@@ -500,43 +624,33 @@
                     });
                     $("section#reportArea > div > p#question > em").first().click();
                 });
-                $("footer#commArea > div#loading").hide();
+                alert.hide();
             });
             $().ready(function() {
                 $("section").hide();
-                $("footer#commArea > div#loading > i#infoicon").hide();
-                $("footer#commArea > div#loading").hide();
-                socket.emit("getCal");
-                $("footer#commArea > div#loading > span").text("下載行程列表...");
-                $("footer#commArea > div#loading").show();
-                setInterval(function() {
-                    socket.emit("getCal");
-                    $("footer#commArea > div#loading > span").text("下載行程列表...");
-                    $("footer#commArea > div#loading").show();
-                }, calrefreshtime * 1000);
-                refresh = setInterval(function() {
-                    refreshtimer.clock--;
-                    if(refreshtimer.clock < 30) {
-                        $("section").hide();
-                        $("section#countdownArea").show();
-                        $("button#enableRefresh > span").text(moment.utc(moment.duration(refreshtimer.clock, "seconds").asMilliseconds()).format("mm:ss"));
-                    }
-                    if(refreshtimer.clock == 0) {
-                        location.href = "/";
-                    }
-                }, 1000);
+                $("p#textMsgArea").hide();
+                alert.hide();
+                refreshArray.push(new timer(1, "更新資料"));
+                refreshArray[refreshArray.length-1].startTimer(function() {
+                    update();
+                });
+                $("body").on("keypress", function() {
+                    refreshtimer.reset();
+                });
                 $("div#currentEvent").on("touchstart", function(event) {
                     if(!$("header#calArea > div#mainEvent > div#upcommingEvent").data("disable")) {
                         touchpoint.start.x = event.touches[0].clientX;
                         touchpoint.start.y = event.touches[0].clientY;
                     }
                 });
-                $("div#currentEvent").on("touchmove", function(event) {
+                $("div#currentEvent").on("touchmove", async (event) => {
                     if(!$("header#calArea > div#mainEvent > div#upcommingEvent").data("disable")) {
                         touchpoint.end.x = event.touches[0].clientX;
                         touchpoint.end.y = event.touches[0].clientY;
                         if(touchpoint.checkmove()) {
-                            mainSwipe(true);
+                            await Promise.resolve(mainSwipe(true)).delay(10000).then(async () => {
+                                await Promise.resolve(mainSwipe(false))
+                            });
                         }
                     }
                 });
@@ -546,12 +660,14 @@
                         touchpoint.start.y = event.clientY;
                     }
                 });
-                $("div#currentEvent").on("mouseup", function(event) {
+                $("div#currentEvent").on("mouseup", async (event) => {
                     if(!$("header#calArea > div#mainEvent > div#upcommingEvent").data("disable")) {
                         touchpoint.end.x = event.clientX;
                         touchpoint.end.y = event.clientY;
                         if(touchpoint.checkmove()) {
-                            mainSwipe(true);
+                            await Promise.resolve(mainSwipe(true)).delay(10000).then(async () => {
+                                await Promise.resolve(mainSwipe(false))
+                            });
                         }
                     }
                 });
@@ -561,12 +677,12 @@
                         touchpoint.start.y = event.touches[0].clientY;
                     }
                 });
-                $("div#upcommingEvent").on("touchmove", function(event) {
+                $("div#upcommingEvent").on("touchmove", async (event) => {
                     if(!$("header#calArea > div#mainEvent > div#upcommingEvent").data("disable")) {
                         touchpoint.end.x = event.touches[0].clientX;
                         touchpoint.end.y = event.touches[0].clientY;
                         if(!touchpoint.checkmove()) {
-                            mainSwipe(false);
+                            await Promise.resolve(mainSwipe(false));
                         }
                     }
                 });
@@ -576,12 +692,12 @@
                         touchpoint.start.y = event.clientY;
                     }
                 });
-                $("div#upcommingEvent").on("mouseup", function(event) {
+                $("div#upcommingEvent").on("mouseup", async (event) => {
                     if(!$("header#calArea > div#mainEvent > div#upcommingEvent").data("disable")) {
                         touchpoint.end.x = event.clientX;
                         touchpoint.end.y = event.clientY;
                         if(!touchpoint.checkmove()) {
-                            mainSwipe(false);
+                            await Promise.resolve(mainSwipe(false));
                         }
                     }
                 });
@@ -611,123 +727,135 @@
                 });*/
                 $("button#recordingBtn").on("click", function() {
                     refreshtimer.reset();
-                    $("section#recordingArea > div > p.tip").text("請對準麥克風，按下留言按鈕，開始留言");
+                    $("section#recordingArea > div > p.tip").text("請選擇你要的留言方式");
                     $("button#sendRecording").hide();
+                    $("button#sendText").show();
+                    $("button#enableRecording").show();
+                    $("p#textMsgArea").hide();
+                    $("textarea#textMessage").val("");
                     //$("button#playRecording").hide();
                     $("section#recordingArea").show();
                 });
                 $("button#enableRecording").on("click", function() {
+                    $("section#recordingArea").data("type", 0);
+                    $("section#recordingArea > div > p.tip").text("請對準麥克風，按下留言按鈕，開始留言");
                     if(recstatus) {
                         recorder.stop();
                     } else {
                         //wavesurfer.empty();
                         recordingfile = null;
-                        if(!navigator.hasOwnProperty("mediaDevices")) {
-                            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                                recstatus = true;
-                                recording = setInterval(function() {
-                                    recordtimer.clock++;
-                                    refreshtimer.reset();
-                                    $("button#enableRecording > span").text(moment.utc(moment.duration(recordtimer.clock, "seconds").asMilliseconds()).format("mm:ss"));
-                                    if(recordtimer.clock > 4 * 60) {
-                                        $("section#recordingArea > div > p.tip").text("剩下"+moment.utc(moment.duration(maxrecordtime - recordtimer.clock, "seconds").asMilliseconds()).format("mm:ss")+"之後自動結束錄音");
-                                    }
-                                    if(recordtimer.clock == maxrecordtime) {
-                                        if(recorder.status == "recording") {
-                                            $("button#enableRecording").click();
+                        var iOS = ['iPad', 'iPhone', 'iPod'].indexOf(navigator.platform) > -1;
+                        if(!iOS) {
+                            if(!navigator.hasOwnProperty("mediaDevices")) {
+                                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                                    recstatus = true;
+                                    recording = setInterval(function() {
+                                        recordtimer.clock++;
+                                        refreshtimer.reset();
+                                        $("button#enableRecording > span").text(moment.utc(moment.duration(recordtimer.clock, "seconds").asMilliseconds()).format("mm:ss"));
+                                        if(recordtimer.clock > 4 * 60) {
+                                            $("section#recordingArea > div > p.tip").text("剩下"+moment.utc(moment.duration(maxrecordtime - recordtimer.clock, "seconds").asMilliseconds()).format("mm:ss")+"之後自動結束錄音");
                                         }
-                                    }
-                                },1000);
-                                refreshtimer.reset();
-                                //$("button#playRecording").hide();
-                                $("button#sendRecording").hide();
-                                $("button#closeRecording").hide();
-                                $("button#enableRecording").removeClass("startrecBtn");
-                                $("button#enableRecording").addClass("stoprecBtn");
-                                $("button#enableRecording > i").removeClass("fa-microphone");
-                                $("button#enableRecording > i").addClass("fa-stop-circle");
-                                $("section#recordingArea > div > p.tip").text("停止錄音，請按一下紅色按鈕");
-                                const chunks = [];
-                                recorder = new MediaRecorder(stream);
-                                recorder.ondataavailable = e => {
+                                        if(recordtimer.clock == maxrecordtime) {
+                                            if(recorder.status == "recording") {
+                                                $("button#enableRecording").click();
+                                            }
+                                        }
+                                    },1000);
                                     refreshtimer.reset();
-                                    chunks.push(e.data);
-                                    if (recorder.state == 'inactive') {
-                                        recordingfile = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? new Blob(chunks, { type: 'audio/webm' }) : new Blob(chunks, { type: 'audio/ogg' });
-                                    }
-                                };
-                                recorder.onstop = msg => {
-                                    clearInterval(recording);
-                                    recordingready = true;
-                                    recordtimer.reset();
-                                    recording = null;
-                                    recstatus = false;
-                                    refreshtimer.reset();
-                                    $("button#sendRecording").show();
-                                    //$("button#playRecording").show();
-                                    $("button#closeRecording").show();
-                                    $("button#enableRecording").removeClass("stoprecBtn");
-                                    $("button#enableRecording").addClass("startrecBtn");
-                                    $("button#enableRecording > i").removeClass("fa-stop-circle");
-                                    $("button#enableRecording > i").addClass("fa-microphone");
-                                    $("button#enableRecording > span").text("開始留言");
-                                    $("section#recordingArea > div > p.tip").text("錄音完成，確定上傳請按傳送");
-                                    /*wavesurfer.empty();
-                                    wavesurfer.loadBlob(recordingfile);
-                                    wavesurfer.un("ready");
-                                    wavesurfer.on("ready", function() {
+                                    //$("button#playRecording").hide();
+                                    $("button#sendRecording").hide();
+                                    $("button#closeRecording").hide();
+                                    $("button#enableRecording").removeClass("startrecBtn");
+                                    $("button#enableRecording").addClass("stoprecBtn");
+                                    $("button#enableRecording > i").removeClass("fa-microphone");
+                                    $("button#enableRecording > i").addClass("fa-stop-circle");
+                                    $("section#recordingArea > div > p.tip").text("停止錄音，請按一下紅色按鈕");
+                                    const chunks = [];
+                                    recorder = new MediaRecorder(stream);
+                                    recorder.ondataavailable = e => {
+                                        refreshtimer.reset();
+                                        chunks.push(e.data);
+                                        if (recorder.state == 'inactive') {
+                                            recordingfile = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? new Blob(chunks, { type: 'audio/webm' }) : new Blob(chunks, { type: 'audio/ogg' });
+                                        }
+                                    };
+                                    recorder.onstop = msg => {
+                                        clearInterval(recording);
+                                        recordingready = true;
+                                        recordtimer.reset();
+                                        recording = null;
+                                        recstatus = false;
                                         refreshtimer.reset();
                                         $("button#sendRecording").show();
-                                        $("button#playRecording").show();
+                                        //$("button#playRecording").show();
                                         $("button#closeRecording").show();
                                         $("button#enableRecording").removeClass("stoprecBtn");
                                         $("button#enableRecording").addClass("startrecBtn");
                                         $("button#enableRecording > i").removeClass("fa-stop-circle");
                                         $("button#enableRecording > i").addClass("fa-microphone");
                                         $("button#enableRecording > span").text("開始留言");
-                                        $("section#recordingArea > div > p.tip").text("錄音完成！，你這次錄了"+moment.utc(moment.duration(wavesurfer.getDuration(), "seconds").asMilliseconds()).format("mm 分 ss 秒")+"，確定上傳請按傳送");
-                                    });
-                                    wavesurfer.on("finish", function() {
-                                        $("button#playRecording > span").text("播放留言");
-                                        $("button#playRecording > i").addClass("fa-play");
-                                        $("button#playRecording > i").removeClass("fa-pause");
-                                        isPlaying = false;
-                                    });
-                                    wavesurfer.on("error", function(error) {
+                                        $("section#recordingArea > div > p.tip").text("錄音完成，確定上傳請按傳送");
+                                        /*wavesurfer.empty();
+                                        wavesurfer.loadBlob(recordingfile);
+                                        wavesurfer.un("ready");
+                                        wavesurfer.on("ready", function() {
+                                            refreshtimer.reset();
+                                            $("button#sendRecording").show();
+                                            $("button#playRecording").show();
+                                            $("button#closeRecording").show();
+                                            $("button#enableRecording").removeClass("stoprecBtn");
+                                            $("button#enableRecording").addClass("startrecBtn");
+                                            $("button#enableRecording > i").removeClass("fa-stop-circle");
+                                            $("button#enableRecording > i").addClass("fa-microphone");
+                                            $("button#enableRecording > span").text("開始留言");
+                                            $("section#recordingArea > div > p.tip").text("錄音完成！，你這次錄了"+moment.utc(moment.duration(wavesurfer.getDuration(), "seconds").asMilliseconds()).format("mm 分 ss 秒")+"，確定上傳請按傳送");
+                                        });
+                                        wavesurfer.on("finish", function() {
+                                            $("button#playRecording > span").text("播放留言");
+                                            $("button#playRecording > i").addClass("fa-play");
+                                            $("button#playRecording > i").removeClass("fa-pause");
+                                            isPlaying = false;
+                                        });
+                                        wavesurfer.on("error", function(error) {
+                                            refreshtimer.reset();
+                                            $("button#closeRecording").show();
+                                            $("button#enableRecording").removeClass("stoprecBtn");
+                                            $("button#enableRecording").addClass("startrecBtn");
+                                            $("button#enableRecording > i").removeClass("fa-stop-circle");
+                                            $("button#enableRecording > i").addClass("fa-microphone");
+                                            $("button#enableRecording > span").text("開始留言");
+                                            $("section#recordingArea > div > p.tip").text("錄音發生錯誤！");
+                                            $("section#errorArea > div > p#errorMsg").text("錄音轉換發生錯誤，錯誤："+error);
+                                            $("section#errorArea").show();
+                                        });*/
+                                    }
+                                    recorder.start();
+                                    setTimeout(() => {
+                                        recorder.stop();
+                                    }, maxrecordtime*1000);
+                                    /*recorder.on('deviceError', function(code) {
                                         refreshtimer.reset();
-                                        $("button#closeRecording").show();
-                                        $("button#enableRecording").removeClass("stoprecBtn");
-                                        $("button#enableRecording").addClass("startrecBtn");
-                                        $("button#enableRecording > i").removeClass("fa-stop-circle");
-                                        $("button#enableRecording > i").addClass("fa-microphone");
-                                        $("button#enableRecording > span").text("開始留言");
-                                        $("section#recordingArea > div > p.tip").text("錄音發生錯誤！");
-                                        $("section#errorArea > div > p#errorMsg").text("錄音轉換發生錯誤，錯誤："+error);
+                                        $("section#errorArea > div > p#errorMsg").text("無法啟動音訊設備，請檢查麥克風是否安裝完成，並且授權使用，錯誤："+error);
                                         $("section#errorArea").show();
+                                    });
+                                    recorder.on('deviceReady', function(stream) {
+                                        setTimeout(() => {
+                                            recorder.stop();
+                                        }, maxrecordtime*1000);
                                     });*/
-                                }
-                                recorder.start();
-                                setTimeout(() => {
-                                    recorder.stop();
-                                }, maxrecordtime*1000);
-                                /*recorder.on('deviceError', function(code) {
+                                }).catch(error => {
                                     refreshtimer.reset();
                                     $("section#errorArea > div > p#errorMsg").text("無法啟動音訊設備，請檢查麥克風是否安裝完成，並且授權使用，錯誤："+error);
                                     $("section#errorArea").show();
                                 });
-                                recorder.on('deviceReady', function(stream) {
-                                    setTimeout(() => {
-                                        recorder.stop();
-                                    }, maxrecordtime*1000);
-                                });*/
-                            }).catch(error => {
-                                refreshtimer.reset();
-                                $("section#errorArea > div > p#errorMsg").text("無法啟動音訊設備，請檢查麥克風是否安裝完成，並且授權使用，錯誤："+error);
-                                $("section#errorArea").show();
-                            });
+                            } else {
+                                $("section#errorArea > div > p#errorMsg").text("你的瀏覽器不支援錄音功能，請使用Chrome/Firefox最新版本開啟本頁面");
+                                $("section#errorArea").show();                            
+                            }
                         } else {
-                            $("section#errorArea > div > p#errorMsg").text("你的瀏覽器不支援錄音功能，請使用Chrome/Firefox最新版本開啟本頁面");
-                            $("section#errorArea").show();                            
+                            $("section#errorArea > div > p#errorMsg").text("iOS系統不支援錄音功能，請採用文字留言");
+                            $("section#errorArea").show();                                                        
                         }
                     }
                 });
@@ -736,37 +864,62 @@
                         $("button#enableRecording").click();
                     }
                     $("section#recordingArea").hide();
-                    wavesurfer.empty();
+                    //wavesurfer.empty();
                     recordingfile = null;
                 });
                 $("button#sendRecording").on("click", function() {
-                    var stream = ss.createStream();
-                    var blobStream = ss.createBlobReadStream(recordingfile);
-                    var size = 0;
-                    $("section#recordingArea > div > p.tip").text("上傳中...");
-                    var progress = $("<progress></progress>").prop("max", 100);
-                    $("section#recordingArea > div > p.tip").append(progress);
-                    blobStream.on("data", function(chunk) {
-                        size += chunk.length;
-                        progress.prop("value",Math.floor(size / recordingfile.size * 100));
-                        if(size == chunk.length) {
-                            $("section#recordingArea > div > p.tip").text("檔案發送完畢，等待伺服器回應...");
+                    pendingCommand = function() {
+                        if($("section#recordingArea").data("type") == 0) {
+                            var stream = ss.createStream();
+                            var blobStream = ss.createBlobReadStream(recordingfile);
+                            var size = 0;
+                            $("section#recordingArea > div > p.tip").text("上傳中...");
+                            var progress = $("<progress></progress>").prop("max", 100);
+                            $("section#recordingArea > div > p.tip").append(progress);
+                            blobStream.on("data", function(chunk) {
+                                size += chunk.length;
+                                progress.prop("value",Math.floor(size / recordingfile.size * 100));
+                                if(size == chunk.length) {
+                                    $("section#recordingArea > div > p.tip").text("檔案發送完畢，等待伺服器回應...");
+                                }
+                            });
+                            ss(fileupload).emit("recordingUpload", stream, {filetype: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? "webm" : "ogg"});
+                            blobStream.pipe(stream);
+                        } else {
+                            $("section#recordingArea > div > p.tip").text("發送訊息中...");
+                            socket.emit("sendmsgService", {
+                                message: $("textarea#textMessage").val(),
+                                qid: null
+                            });
                         }
-                    });
-                    ss(fileupload).emit("recordingUpload", stream, {filetype: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? "webm" : "ogg"});
-                    blobStream.pipe(stream);
+                    }
+                    socket.emit("userCheck");
+                });
+                $("button#sendText").on("click", function() {
+                    $("section#recordingArea > div > p.tip").text("請輸入你的留言");
+                    $("section#recordingArea").data("type", 1);
+                    $("p#textMsgArea").show();
+                    $("button#enableRecording").hide();
+                    $("button#sendText").hide();
+                    $("button#sendRecording").show();
                 });
                 $("button#surveyBtn").on("click", function() {
-                    socket.emit("getquestionService");
+                    pendingCommand = function() {
+                        socket.emit("getquestionService");
+                    }
+                    socket.emit("userCheck");
                 });
                 $("button#sendReport").on("click", function() {
-                    socket.emit("sendmsgService", {
-                        message: $("p#question").text(),
-                        qid: $("p#question").data("qid")
-                    });
-                    $("footer#commArea > div#loading > span").text("送出留言...");
-                    $("footer#commArea > div#loading").show();
-                    refreshtimer.reset();
+                    pendingCommand = function() {
+                        socket.emit("sendmsgService", {
+                            message: $("p#question").text(),
+                            qid: $("p#question").data("qid")
+                        });
+                        alert.setMsg("送出留言", 0);
+                        alert.show();
+                        refreshtimer.reset();
+                    }
+                    socket.emit("userCheck");
                 });
                 $("button#closeReport").on("click", function() {
                     $("section#reportArea").hide();

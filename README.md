@@ -13,6 +13,11 @@ JavaScript 桌牌+錄音器
 1. Server端：node.js 務必在8以上，支援async/await
 1. 即時通訊軟體：請申請一個telegram帳號，並註冊一個telegram bot，把key複製下來即可
 1. 行事曆Source：Google或Outlook.com都可以，總之找到行事曆公開的ics網址即可，所以你不需要公布全部的行事曆，可以選擇公布你需要的那一類行事曆即可
+1. 天氣功能採用 airvisual，通訊功能採用telegram，apikey請自行建立apikey.json，內容格式如下
+    `{
+        "airvisual": "你的key",
+        "telegram": "你的key"
+    }`
 
 功能
 ----
@@ -49,6 +54,11 @@ TODO List
 1. 後台管理（用戶管理、訊息管理等等），目前尚未實作
 1. 錄音時的即時波形圖（使用wavesufer.js），其實已經完成了，但raspberry pi上的Chromium瀏覽器的decoder有問題，因此暫時封閉
 
+備註
+----
+1. 本程式的ical分析器採用[ical-expander](https://github.com/mifi/ical-expander)，沒有採用mozilla的ical.js是由於ical.js對於重複事件還要自己手動處理，所以使用wrapper
+1. ical-expander目前（2017/10/24）有個bug，必須自己在它的index.js中把between裡的before和after改成javascript的date object，才可以正常使用
+
 開發者&授權
 ----------
-Kelunyang (kelunyang@outlook.com) @ 2017 GNU授權
+Kelunyang (kelunyang@outlook.com) @ 2017 CC-BY

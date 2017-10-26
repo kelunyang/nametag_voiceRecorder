@@ -16,16 +16,20 @@ var ios = require(globaldir+'express-socket.io-session');
 var ss = require(globaldir+'socket.io-stream');
 var MemoryStore = require(globaldir+'sessionstore');
 var hbs = require(globaldir+'hbs');
-var ical = require(globaldir+'ical.js');
+var IcalExpander = require(globaldir+'ical-expander');
 var Promise = require(globaldir+'bluebird');	//原生不錯，但bluebird有序列執行的功能
 var telegraf = require(globaldir+'telegraf');
-//var Promise = require(globaldir+'promise');
 
 //HTTPS
 var SERVER_CONFIG = {
     key:  fs.readFileSync(__dirname+'/ssl/voiceRecorder.key'),
     cert: fs.readFileSync(__dirname+'/ssl/voiceRecorder.crt')
 };
+var chatbot = new telegraf();
+var api = {
+	telegram: undefined,
+	airvisual: undefined
+}
 
 hbs.registerPartials(__dirname + '/views/partials');
 var app = express();
@@ -50,8 +54,15 @@ var pool = mysql.createPool({
 server.listen(82, function() {
     console.log("voiceRecorder started!");
 });*/
-var server = https.createServer(SERVER_CONFIG, app).listen(82,function() { 
+var server = https.createServer(SERVER_CONFIG, app).listen(82,function() {
 	console.log("voiceRecorder starts in HTTPS mode!");
+	console.log("chatBot starting...");
+	fs.readFile(__dirname+'/apikeys.json', (err, data) => {
+		api = JSON.parse(data);
+		chatbot.token = api.telegram;
+		chatbot.startPolling();
+		console.log("chatBot executed!");
+	  });
 });
 var serv_io = io(server);
 serv_io.use(ios(sessioninstance, {
@@ -61,7 +72,6 @@ serv_io.of("/fileUpload").use(ios(sessioninstance, {
 	autoSave: true
 }));
 app.use(sessioninstance);
-var chatbot = new telegraf("469575579:AAGHx6ju3EF3GFPg04tI9olCu7CJdPJx7Ys");
 chatbot.command("start", (ctx) => {
 	console.log("start", ctx.from);
 	ctx.reply("Welcome!");
@@ -70,8 +80,6 @@ chatbot.hears("hi", (ctx) => {
 	console.log("hi", ctx.from);
 	ctx.reply("Hey there!")}
 );
-chatbot.startPolling();
-
 
 app.get("/", (req,res) => {
 	var ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
@@ -85,6 +93,7 @@ app.get("/", (req,res) => {
 		.then(function(rows) {
 			res.render("nametag", {
 				title: "啟動頁面",
+				api: api.airvisual,
 				jobtitle: rows[0].title,
 				name: rows[0].name
 			})
@@ -163,8 +172,17 @@ serv_io.of("/fileUpload").on("connection", (socket) => {
 	});
 });
 serv_io.sockets.on('connection', async (socket) => {
+	/*var address = socket.request.connection.remoteAddress;
+	console.log('socket connected from ' + address);*/
 	var sessioni = socket.handshake.session;
-	socket.on("getCal", (data) => {
+	socket.on("userCheck", function(data) {
+		if(sessioni.hasOwnProperty("userID")) {
+			socket.emit("userChecked", true);
+		} else {
+			socket.emit("userChecked", false);
+		}
+	});
+	socket.on("getCal", (parameter) => {
 		var errorlist = new Array();
 		var ics = "";
 		var calpri = 0;
@@ -173,15 +191,17 @@ serv_io.sockets.on('connection', async (socket) => {
 		pool.getConnection().then(function(connection) {
 			connection.query("SELECT `ics` FROM userList WHERE `id` = ?",sessioni.userID)
 			.then((rows) => {
+				var promiseArray = new Array();	//Promise Array 不能直接放動作，要放參數，動作等到delay再做
 				ics = JSON.parse(rows[0].ics);
 				pool.releaseConnection(connection);
-				var promiseArray = new Array();	//Promise Array 不能直接放動作，要放參數，動作等到delay再做
-				ics.secondary.forEach(function(item) {
-					promiseArray.push({
-						url: item,
-						type: 1
+				if(parameter == 0) {
+					ics.secondary.forEach(function(item) {
+						promiseArray.push({
+							url: item,
+							type: 1
+						});
 					});
-				});
+				}
 				promiseArray.push({
 					url: ics.primary,
 					type: 0
@@ -226,7 +246,7 @@ serv_io.sockets.on('connection', async (socket) => {
 					});
 					if(output.primary == undefined) {
 						if(output.secondary.length > 0) {
-							output.primary = output.secondary.splice(0,1);
+							output.primary = output.secondary.splice(0,1)[0];
 						} else {
 							output.primary = {
 								location: "休息中",
@@ -346,15 +366,30 @@ function calGetter(response, type) {
 	var events = new Array();
 	var filteredEvent = new Array();
 	var filteredUpcommings = new Array();
-	var str = response.data;
-	var data = ical.parse(str);
-	var comp = new ical.Component(data);
-	var vevents = comp.getAllSubcomponents('vevent');
-	var name = comp.getFirstPropertyValue("x-wr-calname");
+	var ics = response.data;
+	var nameregex = /X-WR-CALNAME:(.+)/;
+	var name = response.data.match(nameregex)[1];
 	var allday = new Array();
-	vevents.forEach(function(item) {
-		events.push(new ical.Event(item)); 
-	});
+
+	var icalExpander = new IcalExpander({ ics , maxIterations: 100 });
+	var icalEvents = icalExpander.between(moment().subtract(7,"days").toISOString(), moment().add(7, "days").toISOString());
+	
+	var mappedEvents = icalEvents.events.map(e => ({ 
+		startDate: e.startDate,
+		summary: e.summary,
+		endDate: e.endDate,
+		location: e.location,
+		duration: e.duration
+	 }));
+	var mappedOccurrences = icalEvents.occurrences.map(o => ({ 
+		startDate: o.startDate, 
+		summary: o.item.summary, 
+		endDate: o.endDate,
+		location: o.item.location,
+		duration: o.item.duration
+	}));	//o.item 代表原始的vevent, o才是經過轉譯的
+	var events = [].concat(mappedEvents, mappedOccurrences);
+
 	events.forEach(function(item) {
 		item.dist = moment().unix() - moment(item.startDate.toJSDate()).unix();
 		if(moment(item.startDate.toJSDate()).unix() <= moment().unix()) {
@@ -373,6 +408,7 @@ function calGetter(response, type) {
 				}
 			}
 		}
+		//console.log(item.location+"/"+moment(item.startDate.toJSDate()).format("YYYY/MM/DD HH:mm:ss")+"=>"+moment(item.endDate.toJSDate()).format("YYYY/MM/DD HH:mm:ss"));
 		if(moment(item.startDate.toJSDate()).unix() > moment().unix()) {
 			if(moment(item.endDate.toJSDate()).unix() > moment().unix()) {
 				if(item.duration.toSeconds() < 60 * 60 * 24) {
@@ -391,7 +427,7 @@ function calGetter(response, type) {
 		calname: name,
 		endtime: moment(sortedEvent[0].endDate.toJSDate()).unix(),
 		starttime: moment(sortedEvent[0].startDate.toJSDate()).unix(),
-		dist: sortedEvent[0].item
+		dist: sortedEvent[0].dist
 	} : undefined;
 	var upcommingEvent = undefined;
 	if(type == 0) {
